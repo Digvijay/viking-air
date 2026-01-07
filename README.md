@@ -20,21 +20,7 @@ The application is orchestrated by **.NET Aspire** and features a React/Tailwind
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│         .NET Aspire Dashboard (Port 17299)          │
-│      Metrics • Traces • Logs • Health               │
-└─────────────────┬───────────────────────────────────┘
-                  │
-    ┌─────────────┼─────────────┐
-    │             │             │
-┌───▼────┐   ┌────▼────┐   ┌───▼────┐
-│ Redis  │   │   API   │   │  Web   │
-│ Cache  │◄──┤ +Sannr  │◄──┤(Tailwind)
-│(Docker)│   │ +Rapp   │   │ (Vite) │
-37: └────────┘   │ +Aspire │   └────────┘
-             └─────────┘
-```
+![Viking Air Architecture](assets/viking_air_architecture.png)
 
 ### Components
 
