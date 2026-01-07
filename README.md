@@ -140,6 +140,16 @@ Integration with .NET Aspire provides:
 
 ## Performance
 
+### Sannr vs Traditional Validation
+
+| Metric | DataAnnotations | Sannr (Optimized) | Improvement |
+|--------|----------------|-------------------|-------------|
+| **Speed** | 946 ns | **369 ns** | **2.5x faster** |
+| **Memory** | 1,224 B | **696 B** | **43% less** |
+| **Allocations** | High | Low | **Reduced GC Pressure** |
+
+*Benchmarks run on Intel Core i7-4980HQ (.NET 10.0.1)*
+
 To run the benchmarks:
 
 ```bash
