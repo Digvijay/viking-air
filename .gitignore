@@ -1,0 +1,40 @@
+## Visual Studio & .NET
+.vs/
+bin/
+obj/
+[Tt]est[Rr]esults/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.dll
+*.exe
+*.pdb
+*.cache
+project.lock.json
+
+## Visual Studio Code
+.vscode/
+
+## JetBrains / Rider
+.idea/
+*.sln.iml
+
+## OS specific
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+## Node / Web
+node_modules/
+dist/
+build/
+.env
+.env.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+## Aspire
+.aspire/

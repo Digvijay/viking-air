@@ -1,0 +1,44 @@
+name: Viking Air AOT CI
+
+on:
+  push:
+    branches: [ master, dev ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x # Or 9.0.x if available
+        
+    - name: Install AOT Workload
+      run: dotnet workload install buildtools
+      
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build Solution
+      run: dotnet build --configuration Release --no-restore
+      
+    - name: Run Skugga AOT Tests
+      run: dotnet test VikingAir.Tests/VikingAir.Tests.csproj --configuration Release
+      
+    - name: Publish API as Native AOT
+      run: |
+        cd VikingAir.Api
+        dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishAot=true
+        
+    - name: Verify AOT Binary
+      run: |
+        if [ -f "VikingAir.Api/bin/Release/net8.0/linux-x64/publish/VikingAir.Api" ]; then
+          echo "✅ Native AOT Binary Generated Successfully"
+        else
+          echo "❌ AOT Binary Missing"
+          exit 1
+        fi
