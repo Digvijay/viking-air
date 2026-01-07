@@ -16,7 +16,7 @@ public class BookingTests
         // 1. Create the mock (Compile-time generation)
         var gatewayMock = Mock.Create<IPaymentGateway>();
 
-        // 2. Setup with Advanced Matchers (v1.1.0 Feature)
+        // 2. Setup with Advanced Matchers (v1.3.0 Feature)
         // Using Regex to match only Visa cards starting with 4
         gatewayMock.Setup(x => x.Charge(It.IsRegex("^4[0-9]{12}(?:[0-9]{3})?$"), It.IsAny<decimal>()))
                    .Returns(true);

@@ -17,8 +17,8 @@ jobs:
       with:
         dotnet-version: 8.0.x # Or 9.0.x if available
         
-    - name: Install AOT Workload
-      run: dotnet workload install buildtools
+    - name: Install AOT Prerequisites
+      run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
       
     - name: Restore dependencies
       run: dotnet restore

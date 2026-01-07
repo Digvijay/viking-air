@@ -5,6 +5,8 @@ A production-ready demonstration of Sannr, Rapp, and Skugga working together in 
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![Aspire](https://img.shields.io/badge/Aspire-13.1-512BD4)](https://learn.microsoft.com/en-us/dotnet/aspire/)
 [![Native AOT](https://img.shields.io/badge/Native%20AOT-Ready-00C853)](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/)
+[![CI Status](https://github.com/Digvijay/viking-air/actions/workflows/viking-air-ci.yml/badge.svg)](https://github.com/Digvijay/viking-air/actions/workflows/viking-air-ci.yml)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Overview
 
