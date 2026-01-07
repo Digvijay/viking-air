@@ -38,3 +38,6 @@ pnpm-debug.log*
 
 ## Aspire
 .aspire/
+
+## BenchmarkDotNet
+BenchmarkDotNet.Artifacts/

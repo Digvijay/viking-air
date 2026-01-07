@@ -16,6 +16,8 @@ Viking Air is a flight booking demonstration that showcases the **Viking AOT Sui
 
 The application is orchestrated by **.NET Aspire** and features a React/Tailwind frontend.
 
+![Viking Air Demo](assets/viking_air_demo.png)
+
 ## Architecture
 
 ```
