@@ -5,7 +5,9 @@ cloud-native .NET 10 application that publishes with Native AOT.
 
 This is a demonstration, not a production system. It exists to prove the four libraries compose
 in a realistic application, and to surface the places where they do not yet compose cleanly.
-Those are recorded in [docs/known-issues.md](docs/known-issues.md).
+It found fourteen defects that none of the libraries' own test suites caught; eleven are now
+fixed upstream and verified here. All of them — fixed and open — are recorded in
+[docs/known-issues.md](docs/known-issues.md).
 
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![Aspire](https://img.shields.io/badge/Aspire-13.1-512BD4)](https://learn.microsoft.com/en-us/dotnet/aspire/)
@@ -93,10 +95,11 @@ public string FlightCode { get; set; } = "";
 - `[Sanitize]` normalises values in place before the rules run
 - Compile-time code generation, no reflection
 
-Note: this API validates **explicitly in the handler** rather than using Sannr's
-`WithSannrValidation` endpoint filter. The filter did not reject invalid payloads in testing, and
-Sannr treats an unregistered type as valid, so the filter would have produced an API with no
-input validation and no error. See [docs/known-issues.md](docs/known-issues.md#1-sannr-aspnet-core-integration-does-not-enforce-validation).
+Sannr validates through its real `WithSannrValidation()` endpoint filter — `VikingAir.Api` carries
+no validation workaround. That filter did *not* reject invalid payloads in Sannr 1.6.0; the defect
+was found here, fixed upstream in 1.7.0, and this API is the proof: posting an invalid booking
+returns `400` with per-field errors through the genuine filter. See
+[docs/known-issues.md](docs/known-issues.md#1-sannr-aspnet-core-integration-did-not-enforce-validation).
 
 ### AutoMappic Mapping
 

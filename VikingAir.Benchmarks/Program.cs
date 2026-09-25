@@ -2,7 +2,6 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
-using BenchmarkDotNet.Toolchains.InProcess.Emit;
 using FluentValidation;
 using MemoryPack;
 using VikingAir.Core;
@@ -78,21 +77,17 @@ public class ValidationBenchmarks
 /// and an equivalent hand-written projection that represents the practical performance ceiling.
 /// </summary>
 /// <remarks>
-/// This class runs on the in-process toolchain. BenchmarkDotNet's default toolchain compiles a
-/// generated host project, the AutoMappic generator runs inside it, and it emits an
-/// <c>AutoMappic.Registration.g.cs</c> that does not compile:
-/// <code>
-/// error CS0116: A namespace cannot directly contain members such as fields, methods or statements
-/// error CS1106: Extension method must be defined in a non-generic static class
-/// error CS0548: property or indexer must have at least one accessor
-/// </code>
-/// The in-process toolchain reuses the already-compiled benchmark assembly, so the generator
-/// does not run again. Numbers from this class are therefore not isolated in a fresh process the
-/// way the other classes are; treat them as indicative and re-measure once the generator defect
-/// is fixed upstream.
+/// This class previously required BenchmarkDotNet's in-process toolchain. AutoMappic's generator
+/// derives C# identifiers from the assembly name without guaranteeing they are valid identifiers,
+/// and BenchmarkDotNet names its generated host assembly <c>&lt;Project&gt;-&lt;Job&gt;-&lt;N&gt;</c>.
+/// The hyphens produced <c>class AutoMappic_Extension_VikingAir_Benchmarks-DefaultJob-1</c>, which
+/// the compiler parsed as a subtraction expression (CS0116 / CS1106 / CS0548), so the host project
+/// never built.
+///
+/// That is fixed upstream, so these benchmarks now run on the default out-of-process toolchain
+/// with full process isolation, like every other class here.
 /// </remarks>
 [MemoryDiagnoser]
-[Config(typeof(InProcessConfig))]
 public class MappingBenchmarks
 {
     private BookingRequest _request = null!;
@@ -218,16 +213,4 @@ public class Program
 {
     public static void Main(string[] args)
         => BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
-}
-
-/// <summary>
-/// Runs benchmarks in the current process instead of a generated host project.
-/// See <see cref="MappingBenchmarks"/> for why that is necessary.
-/// </summary>
-internal sealed class InProcessConfig : ManualConfig
-{
-    public InProcessConfig()
-    {
-        AddJob(Job.Default.WithToolchain(InProcessEmitToolchain.Instance));
-    }
 }

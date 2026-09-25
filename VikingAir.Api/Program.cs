@@ -48,39 +48,19 @@ app.MapDefaultEndpoints();
 
 // STEP 1 of the pipeline is validation.
 //
-// Sannr's ASP.NET Core integration is deliberately NOT used here. Both
-// SannrEndpointExtensions.WithSannrValidation(RouteGroupBuilder) and
-// RouteHandlerBuilderExtensions.WithSannrValidation(RouteHandlerBuilder) were verified against
-// this endpoint and neither rejected a payload that violates every rule on the model - the
-// request was answered 200 Confirmed under both JIT and Native AOT. Sannr's registry also
-// reports success for a type that has no registered validator, so a wiring failure is silent.
-//
-// The generated validator itself is correct; VikingAir.Tests proves it rejects these payloads.
-// So this endpoint resolves the generated validator directly and fails closed if it is missing.
-// Once the integration enforces validation, this block can be replaced by the filter.
-if (!Sannr.SannrValidatorRegistry.TryGetValidator(typeof(BookingRequest), out var bookingValidator)
-    || bookingValidator is null)
-{
-    throw new InvalidOperationException(
-        "No Sannr validator is registered for BookingRequest. Refusing to start: Sannr's registry " +
-        "treats an unregistered type as valid, so the API would accept every payload.");
-}
-
-var api = app.MapGroup("/api");
+// This uses Sannr's ASP.NET Core integration directly. Earlier it could not: both
+// WithSannrValidation overloads bound to a shadow registry that nothing ever wrote to, so the
+// filter silently skipped validation and answered 200 Confirmed for a payload violating every
+// rule on the model. Sannr 1.7.0 fixes the shadowing and additionally fails closed at endpoint
+// construction when a bound model has no registered validator, so a wiring failure can no longer
+// be silent. The explicit validator lookup that used to stand in for the filter is gone.
+var api = app.MapGroup("/api").WithSannrValidation();
 
 api.MapPost("/book", async (BookingRequest request, HybridCache cache) =>
 {
-    // STEP 1: SANNR VALIDATION (explicit, fail-closed - see the note above)
-    // Sannr's [Sanitize] rules are applied by the validator, so `request` is trimmed and
-    // upper-cased in place before anything downstream sees it.
-    var validation = await bookingValidator(new Sannr.SannrValidationContext(request));
-    if (validation.Errors.Count > 0)
-    {
-        return Results.ValidationProblem(
-            validation.Errors
-                .GroupBy(e => e.MemberName ?? string.Empty)
-                .ToDictionary(g => g.Key, g => g.Select(e => e.Message ?? "Invalid.").ToArray()));
-    }
+    // STEP 1 happened in the Sannr endpoint filter above: the request was validated and its
+    // [Sanitize] rules applied, so `request` is already trimmed and upper-cased here. An invalid
+    // payload never reaches this delegate.
 
     // STEP 2: RAPP CACHING (Binary & Schema-Safe)
     var key = $"booking:{request.PassportNumber}";

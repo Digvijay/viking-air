@@ -23,9 +23,9 @@
          All Map<T>() calls stay inside this assembly, behind BookingMapping. Calling Map<T>()
          from another assembly emits interceptors targeting helper methods that only exist
          here (CS1061). -->
-    <PackageReference Include="AutoMappic" Version="0.7.0" />
-    <PackageReference Include="Rapp" Version="1.2.0" />
-    <PackageReference Include="Sannr" Version="1.6.0" />
+    <PackageReference Include="AutoMappic" Version="0.7.0-gccd4f2ee8f" />
+    <PackageReference Include="Rapp" Version="1.3.0" />
+    <PackageReference Include="Sannr" Version="1.7.0" />
 
     <!-- Transitive security pin: Sannr 1.6.0 resolves Microsoft.OpenApi 2.4.1, which is
          affected by GHSA-v5pm-xwqc-g5wc. Remove this pin once Sannr ships a patched floor. -->

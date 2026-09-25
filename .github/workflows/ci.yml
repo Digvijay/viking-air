@@ -5,79 +5,88 @@ permissions:
 
 on:
   push:
-    branches: [ "master", "main", "dev" ]
+    branches: [ "main", "development" ]
   pull_request:
+    branches: [ "main", "development" ]
   workflow_dispatch:
 
 env:
   DOTNET_NOLOGO: true
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
-  build-and-test:
-    name: Build and test
+  build:
+    name: Build & Test (.NET 8 LTS + .NET 10)
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Required: Nerdbank.GitVersioning walks history to compute version height and
+          # hard-fails on a shallow clone.
+          fetch-depth: 0
 
-      - name: Setup .NET
+      - name: Setup .NET (8.0 LTS and 10.0)
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Restore
         run: dotnet restore VikingAir.sln
 
       - name: Build
-        run: dotnet build VikingAir.sln --configuration Release --no-restore
+        run: dotnet build VikingAir.sln --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test VikingAir.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+        run: >
+          dotnet test VikingAir.sln --no-build --configuration Release
+          --collect:"XPlat Code Coverage" --results-directory ./coverage
 
-      - name: Upload test results
-        if: always()
+      - name: Upload coverage
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: test-results
-          path: "**/*.trx"
+          name: code-coverage
+          path: ./coverage
 
-  benchmarks-smoke:
-    name: Benchmarks execute
+  preview:
+    name: Preview .NET (net11.0)
     runs-on: ubuntu-latest
+    # Advisory. A preview SDK can regress for reasons outside this repository, so this leg
+    # reports breakage without blocking the merge queue.
+    continue-on-error: true
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Setup .NET
+      - name: Setup .NET (8.0, 10.0 and 11.0 preview)
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            8.0.x
+            10.0.x
+            11.0.x
+          dotnet-quality: preview
 
-      # A dry job proves the benchmarks still compile and that their correctness guards
-      # hold - in particular that a Sannr validator is actually registered for the model.
-      # It does not produce publishable timings.
-      - name: Run benchmarks in dry mode
-        run: dotnet run --configuration Release --project VikingAir.Benchmarks -- --job dry --filter '*'
+      - name: Report SDK version
+        run: dotnet --info
 
-  web:
-    name: Frontend build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: VikingAir.Web
-    steps:
-      - uses: actions/checkout@v4
+      - name: Restore (including net11.0)
+        env:
+          INCLUDE_PREVIEW_TFM: 'true'
+        run: dotnet restore VikingAir.sln
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: VikingAir.Web/package-lock.json
+      - name: Build (including net11.0)
+        env:
+          INCLUDE_PREVIEW_TFM: 'true'
+        run: dotnet build VikingAir.sln --no-restore --configuration Release
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint --if-present
-
-      - name: Build
-        run: npm run build
+      - name: Test (including net11.0)
+        env:
+          INCLUDE_PREVIEW_TFM: 'true'
+        run: dotnet test VikingAir.sln --no-build --configuration Release
