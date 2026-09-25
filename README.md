@@ -1,20 +1,35 @@
 # Viking Air
 
-A production-ready demonstration of Sannr, Rapp, and Skugga working together in a cloud-native .NET 10 application.
+A reference demonstration of AutoMappic, Sannr, Rapp, and Skugga working together in a
+cloud-native .NET 10 application that publishes with Native AOT.
+
+This is a demonstration, not a production system. It exists to prove the four libraries compose
+in a realistic application, and to surface the places where they do not yet compose cleanly.
+Those are recorded in [docs/known-issues.md](docs/known-issues.md).
 
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![Aspire](https://img.shields.io/badge/Aspire-13.1-512BD4)](https://learn.microsoft.com/en-us/dotnet/aspire/)
-[![Native AOT](https://img.shields.io/badge/Native%20AOT-Ready-00C853)](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/)
+[![Native AOT](https://img.shields.io/badge/Native%20AOT-Verified-00C853)](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/)
 
 ## Overview
 
-Viking Air is a flight booking demonstration that showcases the **Viking AOT Suite** - a collection of three .NET libraries designed for Native AOT compilation:
+Viking Air is a flight booking demonstration that showcases four .NET libraries built on
+compile-time source generation rather than runtime reflection:
 
-- **Sannr**: Minimal validation via source generation.
+- **AutoMappic**: Object mapping via source generation.
+- **Sannr**: Validation via source generation.
 - **Rapp**: Schema-safe binary caching with MemoryPack.
-- **Skugga**: Native AOT-compatible mocking framework.
+- **Skugga**: Native AOT-compatible test doubles.
+
+The shared premise is that removing runtime reflection makes an application publishable with
+Native AOT, which lowers startup time and working set, which in turn allows more workloads to be
+packed onto the same infrastructure.
 
 The application is orchestrated by **.NET Aspire** and features a React/Tailwind frontend.
+
+`VikingAir.Api` has been verified to publish and run as a Native AOT binary, with validation,
+caching, and mapping all working in the published binary. See
+[docs/benchmarks.md](docs/benchmarks.md) for the measurements and the hardware they were taken on.
 
 ![Viking Air Demo](assets/viking_air_demo.png)
 
@@ -26,11 +41,12 @@ The application is orchestrated by **.NET Aspire** and features a React/Tailwind
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **VikingAir.Api** | ASP.NET Core Minimal API | Backend with Sannr validation + Rapp caching |
+| **VikingAir.Api** | ASP.NET Core Minimal API | Backend: Sannr validation, Rapp caching, AutoMappic mapping |
 | **VikingAir.Web** | React + Vite + Tailwind | Frontend user interface |
-| **VikingAir.Core** | .NET Class Library | Shared models with `[RappCache]` + `[MemoryPackable]` |
+| **VikingAir.Core** | .NET Class Library | Shared models and the AutoMappic mapping profile |
 | **VikingAir.AppHost** | .NET Aspire | Orchestrates all services + Redis |
 | **VikingAir.EvolutionDemo** | Console App | Demonstrates Rapp's schema safety |
+| **VikingAir.Tests** | xUnit + Skugga | Validation, mapping, cache and payment-gateway tests |
 | **VikingAir.Benchmarks** | BenchmarkDotNet | Performance comparisons |
 
 ## Quick Start
@@ -64,18 +80,37 @@ This command starts:
 
 ### Sannr Validation
 
-Sannr provides zero-allocation validation using source generators.
+Sannr generates a validator for the model at compile time.
 
 ```csharp
 [Required(ErrorMessage = "Flight code is required")]
 [StringLength(10, MinimumLength = 3)]
-[RegularExpression(@"^[A-Z]{2}\d{3,4}$")]
+[Sanitize(Trim = true, ToUpper = true)]
 public string FlightCode { get; set; } = "";
 ```
 
-- Significantly faster than DataAnnotations
-- Reduced memory usage
-- Compile-time code generation
+- Faster and lower-allocation than DataAnnotations and FluentValidation on this model
+- `[Sanitize]` normalises values in place before the rules run
+- Compile-time code generation, no reflection
+
+Note: this API validates **explicitly in the handler** rather than using Sannr's
+`WithSannrValidation` endpoint filter. The filter did not reject invalid payloads in testing, and
+Sannr treats an unregistered type as valid, so the filter would have produced an API with no
+input validation and no error. See [docs/known-issues.md](docs/known-issues.md#1-sannr-aspnet-core-integration-does-not-enforce-validation).
+
+### AutoMappic Mapping
+
+AutoMappic generates the mapping between the wire, persistence, and response shapes at compile
+time. All mapping lives in `VikingAir.Core` behind the `BookingMapping` facade.
+
+```csharp
+var entity       = BookingMapping.ToEntity(request);       // wire -> persistence
+var confirmation = BookingMapping.ToConfirmation(entity);  // persistence -> response
+```
+
+The response shape deliberately carries only a three-character passport suffix, never the full
+passport number. `VikingAir.Tests/MappingTests.cs` asserts that, including a check over the
+serialised response so a future added member cannot silently re-expose it.
 
 ### Rapp Caching
 
@@ -93,6 +128,11 @@ public partial class BookingRequest
 - Schema hash prevents deserialization of incompatible data
 - Binary serialization using MemoryPack
 - Native AOT compatible
+
+### Skugga Test Doubles
+
+Skugga generates test doubles at compile time, so the test suite runs under Native AOT without
+runtime proxy generation. See `VikingAir.Tests/BookingTests.cs`.
 
 ### Observability
 
@@ -126,21 +166,48 @@ Integration with .NET Aspire provides:
 
 ## Performance
 
-### Sannr vs Traditional Validation
+The numbers below were produced by this repository's benchmark project. The full tables, the
+hardware they were taken on, and the caveats are in [docs/benchmarks.md](docs/benchmarks.md).
+Nothing here should be quoted without that context.
 
-| Metric | DataAnnotations | Sannr (Optimized) | Improvement |
-|--------|----------------|-------------------|-------------|
-| **Speed** | 946 ns | **369 ns** | **2.5x faster** |
-| **Memory** | 1,224 B | **696 B** | **43% less** |
-| **Allocations** | High | Low | **Reduced GC Pressure** |
+### Validation
 
-*Benchmarks run on Intel Core i7-4980HQ (.NET 10.0.1)*
+| Method | Mean | Allocated |
+|---|---:|---:|
+| FluentValidation (baseline) | 164.51 ns | 696 B |
+| DataAnnotations | 366.83 ns | 1224 B |
+| **Sannr** | **56.59 ns** | **256 B** |
+
+Sannr is about 2.9x faster than FluentValidation and 6.5x faster than DataAnnotations on this
+model, and allocates 63% less than FluentValidation.
+
+### Mapping
+
+| Method | Mean | Allocated |
+|---|---:|---:|
+| Hand-written (baseline) | 56.21 ns | 136 B |
+| **AutoMappic** | **68.64 ns** | **208 B** |
+| AutoMapper | 152.81 ns | 136 B |
+
+AutoMappic is about 2.2x faster than AutoMapper and works under Native AOT, which AutoMapper does
+not. It is 22% slower than a hand-written mapper and currently allocates more than either
+alternative; that allocation overhead is an open issue, not a property of the approach.
+
+### Serialization
+
+Binary (MemoryPack, used by Rapp) against System.Text.Json: about 2.6x faster to serialize and
+4.3x faster to deserialize on this payload.
+
+*Measured on a Snapdragon X Elite X1E80100 (ARM64), Windows 11, .NET 10.0.12, BenchmarkDotNet
+0.15.8. A developer laptop, not a server.*
 
 To run the benchmarks:
 
 ```bash
-dotnet run -c Release --project VikingAir.Benchmarks
+dotnet run -c Release --project VikingAir.Benchmarks -- --filter '*'
 ```
+
+The benchmarks fail rather than report a number if a library under test is not actually wired up.
 
 ## Build and Deployment
 
