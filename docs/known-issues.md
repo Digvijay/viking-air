@@ -597,7 +597,7 @@ breaking changes in a transitive dependency. Restore across all six repositories
 
 # 26. Prova: the test framework the rest of the suite depends on
 
-**24 defects recorded, 21 fixed.** Full detail in
+**28 defects recorded, 28 fixed.** Full detail in
 [Prova's own `docs/known-issues.md`](https://github.com/Digvijay/Prova/blob/main/docs/known-issues.md).
 
 Prova is the AOT-safe, zero-reflection test framework that AutoMappic's tests already ran on, so it
@@ -618,14 +618,29 @@ next one visible.
    endings** in any CRLF file it touched.
 8. The FsCheck emission tests had been asserting against an **empty generator run**, because the
    verification harness never referenced the assembly whose attributes it was testing.
+9. Closing the last three items uncovered six more. `Prova.Aspire.Sample` had been recorded as an
+   empty directory; it was in fact three tracked projects in no solution, **carrying vulnerable
+   packages precisely because they were outside the audit**. A parity test written to stop that
+   recurring then found two further projects in no solution — both of which **had never compiled**.
+10. And, found only while writing tests for something else: **`Assert.Equal` on two equal arrays
+    failed.** It compared collections by reference. `Assert.NotEqual` did not exist at all.
 
-The recurring theme, and the one worth naming in the submission: **a documented public API that
-compiles and does nothing.** It appeared five times independently in Prova alone. Static analysis
-does not find this class of defect, and neither does a passing test suite — only actually running
-the thing does.
+Two themes are worth naming in the submission.
 
-Prova now runs **241 tests on `net8.0` and `net10.0`** with a truthful exit code, **114 on .NET 11
-RC1**, and every fix is pinned by a test that fails without it.
+The first is **a documented public API that compiles and does nothing.** It appeared five times
+independently in Prova alone. Static analysis does not find this class of defect, and neither does
+a passing test suite — only actually running the thing does.
+
+The second is sharper, and it generalises beyond Prova: **a project outside the build graph is also
+outside the audit.** Every "restore is clean" and "the tests pass" claim is scoped to what a
+solution file happens to list. Three separate times in this repository, code that was tracked in
+git, shipped to anyone who cloned it, and referenced from the documentation was compiled by nothing
+and therefore checked by nothing. The fix that matters is not the five csprojs — it is
+`SolutionParityTests`, which asserts that no project on disk is outside a solution and fails the
+build when the next one appears. A check that cannot drift beats a fix that can.
+
+Prova now runs **307 tests on `net8.0` and `net10.0`** with a truthful exit code, and every fix is
+pinned by a test that fails without it.
 
 ---
 
@@ -633,10 +648,13 @@ RC1**, and every fix is pinned by a test that fails without it.
 
 | | Count |
 | :--- | ---: |
-| Defects recorded across the six repositories | 49 |
-| Fixed and verified by a test | 43 |
-| Open and documented | 6 |
+| Defects recorded across the six repositories | 53 |
+| Fixed and verified by a test | 50 |
+| Open, documented, and awaiting a design decision | 3 |
 
-Verified on `net8.0` and `net10.0` across all six repositories, and on .NET 11 RC1 as an advisory
-CI leg, so that next year's breaking changes surface during the preview window rather than on
-release day.
+The three open items are all AutoMappic API-design questions (11, 12 and the `RequiresDynamicCode`
+annotation), recorded in full above rather than quietly closed.
+
+Verified on `net8.0` and `net10.0` across all six repositories. A .NET 11 preview leg is wired as an
+opt-in CI job so that next year's breaking changes surface during the preview window rather than on
+release day; it last ran green on RC1 and is not re-run on every local build.
