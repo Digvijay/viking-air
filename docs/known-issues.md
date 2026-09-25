@@ -221,73 +221,62 @@ locale with a non-US decimal separator (found on a Swedish machine, where `$99.9
 
 ---
 
-# Open
+# Resolved after direct investigation
 
-## 10. AutoMappic: the `Profile` / `IMapper` API is not AOT-safe
+The three items that stood here were recorded as open API-design questions. Investigating them
+directly turned two into ordinary defects and retired the third, so the "awaiting a design
+decision" framing was wrong. They are summarised here and recorded in full in AutoMappic''s own
+`docs/known-issues.md`.
 
-Publishing `VikingAir.Api` with `PublishAot=true` produces IL2026 and IL3050 warnings from
-AutoMappic's own API surface:
+## 10. AutoMappic: `Profile.CreateMap` was annotated as requiring dynamic code
 
-```
-warning IL3050: Using member 'AutoMappic.IMapper.Map<TDestination>(Object)' which has
-'RequiresDynamicCodeAttribute' can break functionality when AOT compiling.
-```
+`[RequiresDynamicCode]` on the generic `CreateMap` was factually wrong — the method assigns a
+field and adds to a list, and the generator reads `CreateMap` calls from the syntax tree rather
+than instantiating anything. Removed. `[RequiresUnreferencedCode]` on the same method and the
+annotations on `IMapper` are kept deliberately: trimming and the reflection fallback are real, and
+the trimming analyzer requires interface and implementation annotations to match. What was
+actually wrong was the documentation, which now names the generated extension methods as the
+AOT-safe API instead of implying the whole `Profile` surface is AOT-clean.
 
-`MapperConfiguration`, `Profile`, `CreateMap`, `ForMember`, and `IMapper.Map<T>` are all annotated
-as requiring dynamic code. The published binary does work, so the interceptor is evidently
-applying, but every AOT consumer of the documented API gets trim and AOT warnings, and anyone
-treating IL3050 as an error cannot build at all.
+Worth recording: three attempts to reproduce this found nothing, including for a deliberate
+`Type.MakeGenericType` control probe. `PublishAot=true` alone does not switch the analyzers on.
+An AOT clean bill of health obtained without a control probe should not be believed.
 
-This matters for positioning: AutoMappic's headline claim is mapping without reflection, and its
-most discoverable API is the AutoMapper-compatible one that is marked as needing reflection.
-AutoMappic's own `samples/AotBenchmark` uses this same API.
+## 11. AutoMappic: `PrivateAssets="all"` producing a runtime failure — withdrawn
 
-**Why it is still open:** the fix is a design decision, not a defect repair. Either the intercepted
-paths are annotated so the warnings do not fire when the generator handles the call, or a distinct
-AOT-safe API is documented and the reflection-based one is marked clearly as a compatibility shim.
-Both are breaking changes to the public surface and should be made deliberately rather than
-alongside a batch of bug fixes.
+Did not reproduce. Built against a real consumer from a locally packed package,
+`AutoMappic.Core.dll` is copied to output, appears in `deps.json`, and interception works.
+`PrivateAssets` governs flow to downstream projects, and the package ships its targets under both
+`build/` and `buildTransitive/`. The narrower case of a library that itself packs was not tested
+and is untested rather than disproven.
 
-## 11. AutoMappic: `PrivateAssets="all"` produces a runtime failure, not a compile error
+## 12. AutoMappic: allocating more than both alternatives
 
-The obvious way to stop the generator flowing downstream is `PrivateAssets="all"` on the
-`PackageReference`. That also withholds `AutoMappic.Core.dll`, which the generated mapping code
-needs at run time. Downstream projects compile successfully and fail when the mapping executes:
+A boxing defect, not a trade-off. Generated bodies boxed the identity key on every map while the
+interceptor had tracking disabled, so the two calls that consumed it were no-ops. Allocation is
+now identical to hand-written mapping.
 
-```
-System.IO.FileNotFoundException: Could not load file or assembly 'AutoMappic.Core'
-```
+The larger finding was underneath it: **no benchmark in AutoMappic could build at all.**
+BenchmarkDotNet rebuilds the referenced graph with `/p:ArtifactsPath`, relocating `obj/`, and
+Nerdbank.GitVersioning then fails with MSB3030 on a staging file it never wrote. Every method
+reported `NA`, which means the performance table published in the README — the evidence for the
+project''s central claim — could not have come from that source tree. `dotnet build` on the
+benchmark project succeeds, because the failure happens only in the nested build BenchmarkDotNet
+performs at run time. A green build is not evidence that a benchmark runs.
 
-**Why it is still open:** `PrivateAssets="all"` also suppresses the package's MSBuild targets
-import, so the library cannot emit a build-time diagnostic — by the time the misconfiguration
-exists, the code that would warn about it has been excluded. The durable fix is to split the
-runtime library into its own package so the generator can be made private without taking the
-runtime with it. That is a packaging change with migration consequences for existing consumers.
-Documented here and in AutoMappic's README as a known sharp edge.
+The benchmarks were also pinned to `RuntimeMoniker.Net90` while the project targeted `net10.0` and
+captioned its results .NET 10.0.12, and they covered only the current release while the library
+ships `net8.0` too. This is the same defect already recorded against Sannr and Rapp — a shipped
+framework that is never exercised — and it was not recognised as the same defect until the
+benchmarks were looked at directly. Benchmarks now derive their frameworks from the shipped
+library list, which immediately earned its keep: AutoMappic is marginally faster than hand-written
+mapping on .NET 10 and about 12% slower on .NET 8.
 
-## 12. AutoMappic: allocates more than both alternatives
-
-From [docs/benchmarks.md](benchmarks.md), mapping a five-member object:
-
-| Method | Mean | Allocated |
-|---|---:|---:|
-| Hand-written | 56.21 ns | 136 B |
-| AutoMappic | 68.64 ns | 208 B |
-| AutoMapper | 152.81 ns | 136 B |
-
-AutoMappic is comfortably faster than AutoMapper but allocates 53% more than both it and the
-hand-written baseline. For a compile-time mapper emitting a direct projection, 72 bytes of overhead
-per map is unexpected, and it matters specifically because reduced memory pressure is central to
-the density argument these libraries are sold on.
-
-**Why it is still open:** this is an optimisation with a real risk of changing generated-code
-semantics, and it needs the allocation traced to a specific emitted construct before anything is
-changed. Now that item 7 is fixed, the benchmarks run under BenchmarkDotNet's default
-out-of-process toolchain with a memory diagnoser, so the measurement is trustworthy enough to
-investigate against. It is tracked rather than hidden.
-
----
-
+**Theme.** Three of this programme''s findings now share one shape: a published number whose
+producer was broken — Sannr''s benchmark table for a benchmark that was never wired up, Prova''s
+tests that could not fail the build, and AutoMappic''s performance table from a suite that could
+not compile. A measurement nobody can reproduce is not weaker evidence than a missing one; it is
+worse, because it looks like evidence.
 # Defects in this repository
 
 ## 13. The test project was not in the solution
@@ -648,12 +637,22 @@ pinned by a test that fails without it.
 
 | | Count |
 | :--- | ---: |
-| Defects recorded across the six repositories | 53 |
-| Fixed and verified by a test | 50 |
-| Open, documented, and awaiting a design decision | 3 |
+| Defects recorded across the six repositories | 56 |
+| Fixed and verified by a test | 56 |
+| Withdrawn after failing to reproduce | 1 |
+| Open | 0 |
 
-The three open items are all AutoMappic API-design questions (11, 12 and the `RequiresDynamicCode`
-annotation), recorded in full above rather than quietly closed.
+Nothing is open. The three items previously listed here as AutoMappic API-design questions were
+investigated directly: two were ordinary defects and are fixed, and the third did not reproduce
+and has been withdrawn rather than quietly dropped. Investigating them uncovered four further
+defects, the most serious of which was that AutoMappic's benchmark suite could not build at all,
+so the performance table in its README had no reproducible source.
+
+Two limits on all of the above, stated because they bound what the totals are worth:
+
+* Everything here was verified on a single Windows ARM64 machine. CI has never executed on a
+  GitHub-hosted runner, so none of it is confirmed on x64 or Linux.
+* 56 of 56 measures how hard these repositories were looked at, not that they are defect-free.
 
 Verified on `net8.0` and `net10.0` across all six repositories. A .NET 11 preview leg is wired as an
 opt-in CI job so that next year's breaking changes surface during the preview window rather than on
