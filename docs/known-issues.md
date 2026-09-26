@@ -9,8 +9,15 @@ That is the point of this repository, and it is the main argument for treating t
 programme rather than six unrelated projects. **Nothing is open.** One item is partially fixed —
 Skugga's half of entry 34, an IDE-performance defect with no effect on build output, where the
 remaining half is a large value-model extraction and the available shortcut was a correctness bug.
-Every other entry is fixed, except one that failed to reproduce and is recorded as withdrawn rather
-than dropped.
+One item is blocked on a release rather than a defect — entry 42, AutoMappic's dependency on a
+Prova version that has not been published. Every other entry is fixed, except one that failed to
+reproduce and is recorded as withdrawn rather than dropped.
+
+Entries 39–42 deserve separate mention: they were found by opening the pull requests, which ran CI
+on GitHub-hosted x64 runners for the first time. Four defects appeared in minutes, two of them
+meaning that the workflows claiming to prove every library trim- and AOT-clean had never actually
+enforced a single one of those warnings. Everything before entry 39 was found on one Windows ARM64
+machine, which is exactly why those four survived.
 
 Every item below states what was observed, what it blocked, how it was fixed, and how the fix is
 proven. Anything not fully closed says so plainly.
@@ -55,6 +62,10 @@ proven. Anything not fully closed says so plainly.
 | 36 | Rapp | Samples' JSON size comparison no longer populated | Low | **Fixed** |
 | 37 | Rapp | Three sample projects were in no solution the build ever compiled | Moderate | **Fixed** |
 | 38 | Rapp | Six project files defined a symbol that does nothing | Low | **Fixed** |
+| 39 | All five | `-p:PublishAot=true` disabled the AOT gate it was meant to enforce | High | **Fixed** |
+| 40 | All five | IL-warning list split on its commas, so nothing was enforced | High | **Fixed** |
+| 41 | Prova | A test asserted one of three behaviours and inherited which one | Moderate | **Fixed** |
+| 42 | AutoMappic | Depends on a Prova version that was never published | High | **Blocked on a release** |
 
 Entries 13, 14, 25 and 27–29 are defects in this repository itself.
 
@@ -826,17 +837,115 @@ They are worth recording because that exact misunderstanding is what entry 35 wa
 as an opt-in switch while the cost it guarded was being paid unconditionally by everyone.
 
 ---
+# Found by running CI on GitHub-hosted x64 runners for the first time
+
+Every entry above this line was produced on one Windows ARM64 developer machine. Opening the six
+pull requests ran the workflows on GitHub-hosted Linux and Windows x64 runners for the first time,
+and four more defects appeared within minutes. None of them is a defect in any library's code;
+all four are defects in how the repositories *verify* their code, which is precisely the class a
+developer machine cannot find.
+
+## 39. All five repositories: `-p:PublishAot=true` disabled the AOT gate it was meant to enforce
+
+**Severity: high. Fixed in AutoMappic, Sannr, Rapp, Skugga and Viking Air.**
+
+Each `aot-validation.yml` passed `-p:PublishAot=true` to `dotnet publish`. The flag was redundant
+everywhere — every target project already declares `PublishAot` — and it was actively harmful.
+
+A `-p:` switch on the command line creates a **global property**, and MSBuild propagates global
+properties into every `ProjectReference` it builds. Each of these repositories references a
+`netstandard2.0` analyzer or generator project, which cannot be AOT-compiled, so every run failed
+with `error NETSDK1207: Ahead-of-time compilation is not supported for the target framework.`
+
+The identical property declared inside a project file does **not** flow across a
+`ProjectReference`. That asymmetry between a command-line `-p:` and a project-file property is the
+single most reusable thing this programme learned from running CI, and it is invisible locally
+because nobody publishes from the command line with that flag by hand.
+
+**Fix:** removed from all five workflows. AOT stays configured in the project files.
+
+## 40. All five repositories: the IL-warning list was split on its commas, so nothing was enforced
+
+**Severity: high. Fixed in AutoMappic, Sannr, Rapp, Skugga and Viking Air.**
+
+The same step in each workflow passed:
+
+```
+-p:WarningsAsErrors=IL2026,IL2046,IL2062,IL2067,...
+```
+
+The dotnet CLI splits `-p:` values on commas. Every code after the first was parsed as its own
+switch, and each run died with `MSBUILD : error MSB1006: Property is not valid. Switch: IL2046`
+before compiling anything.
+
+The consequence is worse than a broken build. These workflows were the evidence for the claim that
+every library is trim- and AOT-clean, and they had never enforced a single one of those thirteen
+warnings. A bare `;` would not have worked either, since it is the property separator.
+
+**Fix:** the codes are joined with `%3B`, the escaped semicolon, which reaches MSBuild as one
+property value. Separately, `dotnet publish` on a multi-targeted project requires an explicit
+`--framework` (NETSDK1129), so AutoMappic, Rapp and Viking Air now name `net10.0` on the publish
+step — and only there, because passing it to a solution-wide build breaks the `netstandard2.0`
+generator projects.
+
+## 41. Prova: a test asserted one of three deliberate behaviours and inherited which one
+
+**Severity: medium. Fixed.**
+
+`ConsoleLogger` picks its output syntax from the environment: `GITHUB_ACTIONS` selects GitHub's
+`::error::` workflow commands, `TF_BUILD` selects Azure Pipelines' `##vso[task.logissue]` commands,
+otherwise it writes `[ERR]` in colour. All three are intended. The tests constructed the logger
+with its detecting constructor and asserted `[ERR]`, which is true on a laptop and false on
+Actions, where the test process inherits `GITHUB_ACTIONS=true`. Two tests failed on the first
+hosted run.
+
+The fix that tempts is to unset the variables in the test, which mutates process-global state the
+runner itself reads, or to accept either output, which asserts nothing.
+
+**Fix:** the environment read became a seam — a `ConsoleLogHost` enum, a constructor that takes it,
+and a static `DetectHost()`. The tests name the host and assert all three syntaxes, plus detection
+itself. Verified by running the whole suite with `GITHUB_ACTIONS=true` and `TF_BUILD=True`
+exported: identical results to a clean shell. This is the same defect as entry 27 in Prova's own
+ledger — a hardcoded version string — wearing different clothes: a value taken from the
+surroundings must be injectable, or the tests only ever assert the surroundings they ran in.
+
+## 42. AutoMappic: the test suite depends on a Prova version that was never published
+
+**Severity: high. Not fixable inside AutoMappic.**
+
+`Directory.Packages.props` pins `Prova` to `0.6.0`, which exists only in the local NuGet cache of
+the machine this review was carried out on. nuget.org's newest published Prova is `0.5.0`, so the
+first hosted run — with a cold cache — failed at restore with `NU1102: Unable to find package Prova
+with version (>= 0.6.0)`.
+
+Pinning back to `0.5.0` does not help: the build then fails with several hundred `CS0246` errors,
+because the APIs the tests use arrived in `0.6.0`. The dependency is right; the release is missing.
+
+**Fix:** none available in AutoMappic. Prova `0.6.0` must be published — its
+`Directory.Build.props` already declares that version and its tag-triggered `publish.yml` produces
+it — after which AutoMappic restores unchanged. Recorded rather than worked around, because
+pinning to a version that cannot compile, or vendoring a copy, would conceal a real release gap.
+It is the one item in this programme that is genuinely blocked, and it is blocked on a release,
+not on a defect.
+
+Prova's `publish.yml` was hardened before being trusted with that release: it packed with
+`--no-build` while overriding the package version from the git tag, so a tag that disagreed with
+`Directory.Build.props` would have shipped a correctly-named package full of differently-versioned
+assemblies, greenly. It also ran no tests before pushing to nuget.org. It now fails on a
+tag/version mismatch and runs the suite on the artefacts it is about to publish.
+
+---
 # Programme totals
 
-| Repository | Recorded | Fixed | Withdrawn | Partially fixed |
-| :--- | ---: | ---: | ---: | ---: |
-| Prova | 31 | 31 | 0 | 0 |
-| AutoMappic | 17 | 16 | 1 | 0 |
-| Sannr | 12 | 12 | 0 | 0 |
-| Rapp | 13 | 13 | 0 | 0 |
-| Skugga | 11 | 10 | 0 | 1 |
-| Viking Air (entries 13, 14, 25, 27–29) | 6 | 6 | 0 | 0 |
-| **Total** | **90** | **88** | **1** | **1** |
+| Repository | Recorded | Fixed | Withdrawn | Partially fixed | Blocked externally |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| Prova | 34 | 34 | 0 | 0 | 0 |
+| AutoMappic | 20 | 18 | 1 | 0 | 1 |
+| Sannr | 14 | 14 | 0 | 0 | 0 |
+| Rapp | 15 | 15 | 0 | 0 | 0 |
+| Skugga | 13 | 12 | 0 | 1 | 0 |
+| Viking Air (entries 13, 14, 25, 27–29, 39, 40) | 8 | 8 | 0 | 0 | 0 |
+| **Total** | **104** | **101** | **1** | **1** | **1** |
 
 Counted from the table in each repository's own `docs/known-issues.md`; the library entries in
 this file are summaries of those and are not counted twice. "Fixed" means verified either by a test
@@ -848,16 +957,23 @@ had been removed. Each was found
 by re-reading the files rather than trusting the summary, which is the same lesson as every other
 finding in this document.
 
-Nothing is open. One item is partially fixed: Skugga's half of entry 34, where the cheap and
+One item is partially fixed: Skugga's half of entry 34, where the cheap and
 provable half is done and the remaining half is a value-model extraction across five symbol-driven
 generators and 1922 tests. It is recorded as partially fixed rather than fixed because the
 incrementality test for Skugga's output stage does not yet pass, and rather than closed-with-a-
 shortcut because the available shortcut was a correctness bug.
 
+One item is blocked externally: entry 42, AutoMappic's dependency on an unpublished Prova `0.6.0`.
+It is blocked on a release, not on a defect, and is recorded rather than papered over.
+
 Limits on all of the above, stated because they bound what the totals are worth:
 
-* Every result was produced on a single Windows ARM64 machine. CI has not yet executed on a
-  GitHub-hosted runner, so nothing is confirmed on x64 or Linux until the pull requests' CI runs.
+* Entries 1–38 were produced on a single Windows ARM64 machine. That caveat is now partly retired:
+  CI runs on GitHub-hosted x64 Linux and Windows runners, and Rapp, Skugga and Viking Air are green
+  there across CI, OSPO compliance and benchmarks. Sannr is green on OSPO compliance, CodeQL and
+  dependency submission. AutoMappic cannot complete until entry 42 is resolved. Entries 39–42 are
+  the direct yield of finally running on that hardware, and it took minutes to find four defects
+  that months of local testing could not.
 * All six repositories restore, build and pass every test on `net8.0` and `net10.0`, and on
   `net11.0` with SDK `11.0.100-rc.1.26425.128`. A release candidate is not a release; the `net11.0`
   leg is an opt-in CI job so that breaking changes surface during the preview window, and should
