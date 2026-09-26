@@ -27,3 +27,16 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
+
+  - package-ecosystem: "npm"
+    directory: "/VikingAir.Web"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+  - package-ecosystem: "dotnet-sdk"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
