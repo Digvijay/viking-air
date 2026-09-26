@@ -33,9 +33,20 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
+      - name: Build toolkit libraries from source
+        # See ci.yml: Viking Air integrates the libraries' current source, not their last release.
+        shell: pwsh
+        run: ./eng/build-libraries.ps1
+        env:
+          TOOLKIT_REF: ${{ github.head_ref || github.ref_name }}
+
+      - name: Restore for Native AOT
+        run: dotnet restore VikingAir.Api/VikingAir.Api.csproj --configfile .toolkit/nuget.config -p:PublishAot=true
+
       - name: Publish with Native AOT
         run: >
           dotnet publish VikingAir.Api/VikingAir.Api.csproj
+          --no-restore
           --configuration Release
           -p:PublishAot=true
           -p:TreatWarningsAsErrors=true
@@ -74,9 +85,20 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Build toolkit libraries from source
+        # See ci.yml: Viking Air integrates the libraries' current source, not their last release.
+        shell: pwsh
+        run: ./eng/build-libraries.ps1
+        env:
+          TOOLKIT_REF: ${{ github.head_ref || github.ref_name }}
+
+      - name: Restore
+        run: dotnet restore VikingAir.sln --configfile .toolkit/nuget.config
+
       - name: Build with AOT and trim analyzers as errors
         run: >
           dotnet build VikingAir.sln
+          --no-restore
           --configuration Release
           -p:EnableAotAnalyzer=true
           -p:EnableTrimAnalyzer=true

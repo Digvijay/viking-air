@@ -1,16 +1,19 @@
 # Defects found by integrating the libraries
 
 Viking Air exists to prove AutoMappic, Sannr, Rapp, Skugga, and Prova compose in a realistic
-application. Building it surfaced twenty-five defects that none of the individual repositories' own
-tests or samples caught, because each library is exercised there in isolation, in a single
-assembly, on a single target framework, in a single locale.
+application. Building it surfaced defects that none of the individual repositories' own tests or
+samples caught, because each library is exercised there in isolation, in a single assembly, on a
+single target framework, in a single locale.
 
 That is the point of this repository, and it is the main argument for treating these six as one
-programme rather than six unrelated projects. **Twenty-two of the twenty-five are now fixed**, and
-each fix is verified by a test that fails without it.
+programme rather than six unrelated projects. **Nothing is open.** One item is partially fixed —
+Skugga's half of entry 34, an IDE-performance defect with no effect on build output, where the
+remaining half is a large value-model extraction and the available shortcut was a correctness bug.
+Every other entry is fixed, except one that failed to reproduce and is recorded as withdrawn rather
+than dropped.
 
 Every item below states what was observed, what it blocked, how it was fixed, and how the fix is
-proven. Items that remain open say so plainly.
+proven. Anything not fully closed says so plainly.
 
 | # | Library | Issue | Severity | Status |
 |---|---|---|---|---|
@@ -23,9 +26,11 @@ proven. Items that remain open say so plainly.
 | 7 | AutoMappic | Invalid code for hyphenated assembly names | High | **Fixed** |
 | 8 | AutoMappic | Interceptors lost for transitive consumers | High | **Fixed** |
 | 9 | AutoMappic | Test suite could not run on the .NET 10 SDK | Moderate | **Fixed** |
-| 10 | AutoMappic | Public API annotated `RequiresDynamicCode` | High | Open |
-| 11 | AutoMappic | `PrivateAssets="all"` fails at run time | Moderate | Open, documented |
-| 12 | AutoMappic | Higher allocation than alternatives | Moderate | Open, measured |
+| 10 | AutoMappic | Public API annotated `RequiresDynamicCode` | High | **Fixed** |
+| 11 | AutoMappic | `PrivateAssets="all"` fails at run time | Moderate | **Withdrawn, did not reproduce** |
+| 12 | AutoMappic | Higher allocation than alternatives | Moderate | **Fixed** |
+| 13 | Viking Air | Test project was not in the solution | High | **Fixed** |
+| 14 | Viking Air | CI workflow could never have worked | High | **Fixed** |
 | 15 | Skugga | Culture-dependent literals silently voided mock setups | High | **Fixed** |
 | 16 | Skugga | OpenAPI generator emitted uncompilable code | High | **Fixed** |
 | 17 | Rapp | Vulnerable transitive `Microsoft.OpenApi` | High | **Fixed** |
@@ -37,8 +42,21 @@ proven. Items that remain open say so plainly.
 | 23 | Rapp | Tests ran only on `net10.0` while the package shipped `net8.0` | High | **Fixed** |
 | 24 | Skugga | OpenAPI tests ran only on `net8.0` | Moderate | **Fixed** |
 | 25 | Viking Air | `MessagePack` 2.5.192 carried eleven advisories | High | **Fixed** |
+| 26 | Prova | Thirty-one defects in the test framework (summarised below) | High | **Fixed** |
+| 27 | Viking Air | CI never ran on the default branch | Moderate | **Fixed** |
+| 28 | Viking Air | Shared target-framework policy was never imported | High | **Fixed** |
+| 29 | Viking Air | CI depended on package versions that were never published | High | **Fixed** |
+| 30 | Sannr | Fluent validators silently not generated | High | **Fixed** |
+| 31 | Sannr | Non-reproducible generator output and debug files in consumers | Moderate | **Fixed** |
+| 32 | Rapp | Test generators shipped to every consumer | Moderate | **Fixed** |
+| 33 | Skugga | Generator assemblies leaked into consumers as compile references | Moderate | **Fixed** |
+| 34 | Rapp, Skugga | Generator pipelines defeat incremental caching | Low | **Fixed (Rapp) / Partially fixed (Skugga)** |
+| 35 | Rapp | Shipped library serialized every value twice, once to JSON by reflection | High | **Fixed** |
+| 36 | Rapp | Samples' JSON size comparison no longer populated | Low | **Fixed** |
+| 37 | Rapp | Three sample projects were in no solution the build ever compiled | Moderate | **Fixed** |
+| 38 | Rapp | Six project files defined a symbol that does nothing | Low | **Fixed** |
 
-Two further defects were found in this repository itself (13 and 14) and are described at the end.
+Entries 13, 14, 25 and 27–29 are defects in this repository itself.
 
 ---
 
@@ -586,8 +604,8 @@ breaking changes in a transitive dependency. Restore across all six repositories
 
 # 26. Prova: the test framework the rest of the suite depends on
 
-**28 defects recorded, 28 fixed.** Full detail in
-[Prova's own `docs/known-issues.md`](https://github.com/Digvijay/Prova/blob/main/docs/known-issues.md).
+**31 defects recorded, 31 fixed.** Full detail in
+[Prova's own `docs/known-issues.md`](https://github.com/Digvijay/Prova/blob/master/docs/known-issues.md).
 
 Prova is the AOT-safe, zero-reflection test framework that AutoMappic's tests already ran on, so it
 belongs in the programme on dependency grounds alone. Reviewing it produced the single strongest
@@ -613,6 +631,9 @@ next one visible.
    recurring then found two further projects in no solution — both of which **had never compiled**.
 10. And, found only while writing tests for something else: **`Assert.Equal` on two equal arrays
     failed.** It compared collections by reference. `Assert.NotEqual` did not exist at all.
+11. Running CI's coverage command locally before pushing it showed that Prova's generated entry
+    point **registered none of the platform's extensions** besides the dump providers. Referencing
+    code coverage, TRX or retry did nothing except make the run fail with zero tests executed.
 
 Two themes are worth naming in the submission.
 
@@ -628,39 +649,217 @@ and therefore checked by nothing. The fix that matters is not the five csprojs �
 `SolutionParityTests`, which asserts that no project on disk is outside a solution and fails the
 build when the next one appears. A check that cannot drift beats a fix that can.
 
-Prova now runs **307 tests on `net8.0` and `net10.0`** with a truthful exit code, and every fix is
-pinned by a test that fails without it.
+Prova now passes **460 tests across `net8.0`, `net10.0` and `net11.0` RC1** with a truthful exit
+code. Every code defect is pinned by a test that fails without its fix; the build and CI defects are
+verified by running the command that failed.
 
 ---
 
+# Found while preparing CI to run on GitHub-hosted runners
+
+Every result above was produced locally. Preparing the workflows to run on GitHub for the first
+time, and running each workflow's commands locally before pushing it, found the following. The
+library-side findings from the same pass are recorded in their own repositories: Prova #29 and
+#30, AutoMappic #16 and #17, Rapp #6, Sannr #8 and Skugga #8.
+
+## 27. Viking Air: CI never ran on the default branch
+
+**Severity: moderate. Fixed.**
+
+`ci.yml` triggered on `main`; this repository's default branch is `master`. No pull request here
+had ever been built by CI. Skugga had the same defect.
+
+**Fix:** the workflow triggers on `master`, and the build job runs on `ubuntu-latest` and
+`windows-latest`.
+
+## 28. Viking Air: the shared target-framework policy was never imported
+
+**Severity: high. Fixed.**
+
+`Directory.TargetFrameworks.props` defines the frameworks every repository in the programme builds,
+including the opt-in `net11.0` preview leg. Viking Air had the file but no `Directory.Build.props`,
+so nothing imported it. Every project hardcoded `net10.0`, and the CI job labelled as the preview
+leg built `net10.0` only and reported success. A check that cannot fail is not a check.
+
+**Fix:** `Directory.Build.props` imports the policy, and every project uses
+`$(ToolkitAppTargetFrameworks)`. With the preview enabled, the solution now builds and tests
+`net10.0` and `net11.0`.
+
+## 29. Viking Air: CI depended on package versions that were never published
+
+**Severity: high. Fixed.**
+
+The projects referenced AutoMappic `0.7.0-gccd4f2ee8f`, Rapp 1.3.0, Sannr 1.7.0 and Skugga 1.6.0.
+None of those exist on nuget.org: the AutoMappic version was a local commit build, and the other
+three are the unreleased versions that contain the fixes recorded here. Restore worked only on the
+machine that had built them, so CI could never have restored the solution, on any runner.
+
+Publishing the libraries first would have fixed the restore but not the purpose. This repository
+exists to test the libraries' current source together, and pinning it to published packages would
+test only what was last released.
+
+**Fix:** `eng/build-libraries.ps1` clones Prova, AutoMappic, Rapp, Sannr and Skugga at the same
+branch as the pull request (falling back to each default branch), packs them into a local feed,
+and exports the resulting versions, which `Directory.Build.props` reads. All three workflows run it
+before restoring. A cross-repository change is tested by using one branch name in each repository.
+Verified locally: the script produced 16 packages, and Viking Air restored, built with zero
+warnings, and passed its tests against them.
+
+---
+
+# Found by chasing warnings on the .NET 11 release candidate
+
+Running every repository on SDK `11.0.100-rc.1.26425.128` passed, but not cleanly: Sannr and Skugga
+built with warnings. Treating each warning as a question rather than noise found the entries below.
+None was caused by .NET 11; each was an existing defect that the new SDK's analyzers or a clean
+look made visible. The per-repository records are Sannr #9–#12, Rapp #7–#11, Skugga #9–#11 and
+Prova #31.
+
+## 30. Sannr: fluent validators were silently not generated
+
+**Severity: high. Fixed.**
+
+`ValidatorConfig<T>` classes produced no validator unless the project had also opted into OpenAPI
+schema generation. There was no diagnostic. The fluent test project could not compile because of
+it, and nobody knew, because it was not in the solution.
+
+## 31. Sannr: non-reproducible generator output, and debug files in every consumer
+
+**Severity: moderate. Fixed.**
+
+A static set leaked between compilations, so validators vanished on the second build in the IDE;
+hint names contained `Guid.NewGuid()`; templates stamped `DateTime.Now`; and four debug files were
+added to every consuming compilation. Entry 5 had been recorded as fixed when only part of the
+scaffolding was removed — which is why this entry exists.
+
+## 32. Rapp: test generators shipped to every consumer
+
+**Severity: moderate. Fixed.**
+
+The same defect as entry 5, in a second library: a `TestGenerator` class and a `TestGenerator.g.cs`
+output, packed into the analyzer. The fact that it recurred is the argument for the hygiene tests
+now in both repositories, which assert which generators are registered and that an unrelated
+compilation receives no generated source.
+
+## 33. Skugga: generator assemblies leaked into consumers as compile references
+
+**Severity: moderate. Fixed.**
+
+An unused `GetTargetPath` hook in `Skugga.Core` made every project that referenced it compile
+against three Roslyn generator assemblies, causing `MSB3277`, and one test project compiled only
+because of the leak. The published package was not affected; this was verified by comparing its
+file list before and after.
+
+## 34. Rapp and Skugga: generator pipelines defeat incremental caching
+
+**Severity: low. Rapp fixed; Skugga partially fixed.**
+
+Rapp's pipeline carried `INamedTypeSymbol` and `ClassDeclarationSyntax` values, and Skugga's
+predicate accepted every invocation in the compilation and then combined the result with the whole
+`Compilation` — a value it destructured and never read. In both, code generation re-ran on every
+keystroke in every consuming project. Build output is correct, so this cost IDE CPU rather than
+correctness — but a programme that argues for doing less work at build time should not ship it.
+
+Both generators in Rapp now use `ForAttributeWithMetadataName` and equatable value models, and
+`GeneratorIncrementalityTests` asserts every tracked step reports `Cached` or `Unchanged`, with a
+deliberately defective generator as a control so the harness is proven able to fail.
+
+Skugga's predicate and the pointless compilation combine are fixed and pinned by tests that were
+first shown to fail against the old code. Its `TargetInfo` still carries symbols, and the five
+downstream generators are symbol-driven, so full caching needs a value-model extraction across a
+large surface and remains open in that repository. A shortcut — symbol display-string key equality
+— was considered and rejected: two compilations can present the same key for an interface whose
+members changed, and the generator would then serve stale generated code. A caching fix that can
+emit stale output is worse than the cost it removes.
+
+An audit of the other three generators for the same pattern has not been done.
+
+## 35. Rapp: the shipped library serialized every value twice, once to JSON by reflection
+
+**Severity: high. Fixed.**
+
+This is the most consequential finding for the programme's thesis, and it was found by replacing a
+flaky wall-clock test with an allocation assertion. Rapp's documentation said the package had zero
+telemetry overhead and that a `RAPP_TELEMETRY` symbol in the consuming project would enable a
+JSON-size comparison. In fact the symbol was defined for the whole repository, library included,
+so every cache write in the shipped package serialized the value a second time and a third time to
+JSON by reflection, and every cache hit serialized the result to JSON. The output was discarded.
+Under Native AOT the reflection call failed inside an empty `catch`.
+
+`Serialize` into a reused buffer allocated 568 bytes per call; it now allocates none, and a test
+enforces it. Rapp's published benchmark figures were measured with the overhead included.
+
+## 36. Rapp: the samples' JSON size comparison was no longer populated
+
+**Severity: low. Fixed.** The samples displayed numbers produced by the code removed in entry 35.
+
+The measurement now lives in `Rapp.Dashboard.RappSizeComparison`: opt-in, called from the samples'
+own cache-miss paths, annotated for trimming and AOT with a `JsonTypeInfo` overload for callers who
+need it to stay Native-AOT-safe. `TelemetryOverheadTests` listens to the `Rapp` meter and asserts
+the library emits no size measurement; built with `-p:DefineConstants=RAPP_TELEMETRY` it fails with
+400 of them.
+
+## 37. Rapp: the three sample projects were in no solution the build ever compiled
+
+**Severity: moderate. Fixed.**
+
+Rapp's samples were referenced only by `Samples/Rapp.Samples.sln`. CI built `Rapp.sln`, so the
+repository's only demonstration of how the library is meant to be used had never been compiled by
+any pipeline. Building them raised `CA1873` twice in the gRPC sample immediately — log arguments
+evaluated before the level was checked. The warning is small; that nothing would ever have reported
+it is not.
+
+This is the third instance of the theme first recorded as entry 13 and again as entry 20: a project
+outside the build graph is outside the audit. The samples are now in `Rapp.sln`, so
+`TreatWarningsAsErrors` covers them, and the logging is `[LoggerMessage]`-generated.
+
+## 38. Rapp: six project files defined a symbol that does nothing
+
+**Severity: low. Fixed.**
+
+The three samples, the test project, the playground and the dashboard each appended
+`RAPP_TELEMETRY` to `DefineConstants`. A `#if` is evaluated where the code containing it is
+compiled, and every `#if RAPP_TELEMETRY` block is in `Rapp`'s own sources — so none of the six
+defines changed a single byte of output. They are removed.
+
+They are worth recording because that exact misunderstanding is what entry 35 was: the symbol read
+as an opt-in switch while the cost it guarded was being paid unconditionally by everyone.
+
+---
 # Programme totals
 
-| | Count |
-| :--- | ---: |
-| Defects recorded across the six repositories | 64 |
-| Fixed and verified by a test | 63 |
-| Withdrawn after failing to reproduce | 1 |
-| Open | 0 |
+| Repository | Recorded | Fixed | Withdrawn | Partially fixed |
+| :--- | ---: | ---: | ---: | ---: |
+| Prova | 31 | 31 | 0 | 0 |
+| AutoMappic | 17 | 16 | 1 | 0 |
+| Sannr | 12 | 12 | 0 | 0 |
+| Rapp | 13 | 13 | 0 | 0 |
+| Skugga | 11 | 10 | 0 | 1 |
+| Viking Air (entries 13, 14, 25, 27–29) | 6 | 6 | 0 | 0 |
+| **Total** | **90** | **88** | **1** | **1** |
 
-Counted from the entries in each repository's own `docs/known-issues.md`. An earlier version of
-this table said 56 and did not reconcile with those files: Sannr and Skugga were undercounted, and
-Rapp was credited with three defects while having no `known-issues.md` at all, so an evaluator
-opening that repository would have found no defect record behind the number.
+Counted from the table in each repository's own `docs/known-issues.md`; the library entries in
+this file are summaries of those and are not counted twice. "Fixed" means verified either by a test
+that fails without the fix or, for build and CI defects, by re-running the command that failed.
 
-Nothing is open. The three items previously listed here as AutoMappic API-design questions were
-investigated directly: two were ordinary defects and are fixed, and the third did not reproduce
-and has been withdrawn rather than quietly dropped. Investigating them uncovered four further
-defects, the most serious of which was that AutoMappic's benchmark suite could not build at all,
-so the performance table in its README had no reproducible source.
+The bookkeeping has itself been wrong: an earlier version of this table said 56 and did not
+reconcile with the files, and Sannr's entry 6 was recorded as fixed when only part of the defect
+had been removed. Each was found
+by re-reading the files rather than trusting the summary, which is the same lesson as every other
+finding in this document.
 
-Two limits on all of the above, stated because they bound what the totals are worth:
+Nothing is open. One item is partially fixed: Skugga's half of entry 34, where the cheap and
+provable half is done and the remaining half is a value-model extraction across five symbol-driven
+generators and 1922 tests. It is recorded as partially fixed rather than fixed because the
+incrementality test for Skugga's output stage does not yet pass, and rather than closed-with-a-
+shortcut because the available shortcut was a correctness bug.
 
-* Everything here was verified on a single Windows ARM64 machine. CI has never executed on a
-  GitHub-hosted runner, so none of it is confirmed on x64 or Linux.
-* 63 of 64 measures how hard these repositories were looked at, not that they are defect-free.
-  The bookkeeping itself had three defects, found by re-reading the files rather than trusting
-  the summary — which is the same lesson as every other finding in this document.
+Limits on all of the above, stated because they bound what the totals are worth:
 
-Verified on `net8.0` and `net10.0` across all six repositories. A .NET 11 preview leg is wired as an
-opt-in CI job so that next year's breaking changes surface during the preview window rather than on
-release day; it last ran green on RC1 and is not re-run on every local build.
+* Every result was produced on a single Windows ARM64 machine. CI has not yet executed on a
+  GitHub-hosted runner, so nothing is confirmed on x64 or Linux until the pull requests' CI runs.
+* All six repositories restore, build and pass every test on `net8.0` and `net10.0`, and on
+  `net11.0` with SDK `11.0.100-rc.1.26425.128`. A release candidate is not a release; the `net11.0`
+  leg is an opt-in CI job so that breaking changes surface during the preview window, and should
+  be re-run against the GA SDK.
+* 88 of 90 measures how hard these repositories were looked at, not that they are defect-free.

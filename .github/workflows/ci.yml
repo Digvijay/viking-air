@@ -5,20 +5,29 @@ permissions:
 
 on:
   push:
-    branches: [ "main", "development" ]
+    branches: [ "main", "master", "development" ]
   pull_request:
-    branches: [ "main", "development" ]
+    branches: [ "main", "master", "development" ]
   workflow_dispatch:
 
 env:
   DOTNET_NOLOGO: true
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # Branch to build in each toolkit library; libraries without it fall back to their default
+  # branch. Using one branch name across repositories tests a cross-repository change end to end.
+  TOOLKIT_REF: ${{ github.head_ref || github.ref_name }}
 
 jobs:
   build:
     name: Build & Test (.NET 8 LTS + .NET 10)
-    runs-on: ubuntu-latest
+    # x64 Linux and x64 Windows. Culture, path-separator and line-ending defects have all been
+    # found in these repositories; a single-OS matrix cannot see any of them.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
 
     steps:
       - uses: actions/checkout@v4
@@ -34,8 +43,13 @@ jobs:
             8.0.x
             10.0.x
 
+      - name: Build toolkit libraries from source
+        # Viking Air integrates the libraries' current source, not their last release: it depends
+        # on fixes that are not yet published, and a pinned public version would hide regressions.
+        shell: pwsh
+        run: ./eng/build-libraries.ps1
       - name: Restore
-        run: dotnet restore VikingAir.sln
+        run: dotnet restore VikingAir.sln --configfile .toolkit/nuget.config
 
       - name: Build
         run: dotnet build VikingAir.sln --no-restore --configuration Release
@@ -49,7 +63,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: code-coverage
+          name: code-coverage-${{ matrix.os }}
           path: ./coverage
 
   preview:
@@ -76,10 +90,15 @@ jobs:
       - name: Report SDK version
         run: dotnet --info
 
+      - name: Build toolkit libraries from source
+        # Viking Air integrates the libraries' current source, not their last release: it depends
+        # on fixes that are not yet published, and a pinned public version would hide regressions.
+        shell: pwsh
+        run: ./eng/build-libraries.ps1
       - name: Restore (including net11.0)
         env:
           INCLUDE_PREVIEW_TFM: 'true'
-        run: dotnet restore VikingAir.sln
+        run: dotnet restore VikingAir.sln --configfile .toolkit/nuget.config
 
       - name: Build (including net11.0)
         env:

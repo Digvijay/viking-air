@@ -26,8 +26,15 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Build toolkit libraries from source
+        # See ci.yml: Viking Air integrates the libraries' current source, not their last release.
+        shell: pwsh
+        run: ./eng/build-libraries.ps1
+        env:
+          TOOLKIT_REF: ${{ github.head_ref || github.ref_name }}
+
       - name: Restore
-        run: dotnet restore VikingAir.sln
+        run: dotnet restore VikingAir.sln --configfile .toolkit/nuget.config
 
       - name: Report vulnerable packages
         run: dotnet list VikingAir.sln package --vulnerable --include-transitive
@@ -76,8 +83,15 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Build toolkit libraries from source
+        # See ci.yml: Viking Air integrates the libraries' current source, not their last release.
+        shell: pwsh
+        run: ./eng/build-libraries.ps1
+        env:
+          TOOLKIT_REF: ${{ github.head_ref || github.ref_name }}
+
       - name: Restore
-        run: dotnet restore VikingAir.sln
+        run: dotnet restore VikingAir.sln --configfile .toolkit/nuget.config
 
       - name: Install CycloneDX tool
         run: dotnet tool install --global CycloneDX

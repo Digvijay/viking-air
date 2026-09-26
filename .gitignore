@@ -48,3 +48,5 @@ bench.log
 # Never commit an internal or proxied NuGet feed URL.
 NuGet.config
 aot-out/
+# Toolkit libraries built from source by eng/build-libraries.ps1
+.toolkit/
