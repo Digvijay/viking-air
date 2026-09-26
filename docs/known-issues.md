@@ -637,10 +637,15 @@ pinned by a test that fails without it.
 
 | | Count |
 | :--- | ---: |
-| Defects recorded across the six repositories | 56 |
-| Fixed and verified by a test | 56 |
+| Defects recorded across the six repositories | 64 |
+| Fixed and verified by a test | 63 |
 | Withdrawn after failing to reproduce | 1 |
 | Open | 0 |
+
+Counted from the entries in each repository's own `docs/known-issues.md`. An earlier version of
+this table said 56 and did not reconcile with those files: Sannr and Skugga were undercounted, and
+Rapp was credited with three defects while having no `known-issues.md` at all, so an evaluator
+opening that repository would have found no defect record behind the number.
 
 Nothing is open. The three items previously listed here as AutoMappic API-design questions were
 investigated directly: two were ordinary defects and are fixed, and the third did not reproduce
@@ -652,7 +657,9 @@ Two limits on all of the above, stated because they bound what the totals are wo
 
 * Everything here was verified on a single Windows ARM64 machine. CI has never executed on a
   GitHub-hosted runner, so none of it is confirmed on x64 or Linux.
-* 56 of 56 measures how hard these repositories were looked at, not that they are defect-free.
+* 63 of 64 measures how hard these repositories were looked at, not that they are defect-free.
+  The bookkeeping itself had three defects, found by re-reading the files rather than trusting
+  the summary — which is the same lesson as every other finding in this document.
 
 Verified on `net8.0` and `net10.0` across all six repositories. A .NET 11 preview leg is wired as an
 opt-in CI job so that next year's breaking changes surface during the preview window rather than on
