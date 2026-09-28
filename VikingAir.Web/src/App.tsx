@@ -3,13 +3,20 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Database, Zap, Plane, CheckCircle, AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 
+// The response body is only ever stringified for display, so it is deliberately not
+// mirrored as a DTO here - that would be a second, silently-drifting copy of the server
+// contract. `unknown` states exactly what is known and still forces a check before use.
+type BookingResult =
+  | { success: true; data: unknown }
+  | { success: false; error: unknown };
+
 function App() {
   const [formData, setFormData] = useState({
     flightCode: '',
     passportNumber: '',
     seatPreference: 'Window'
   });
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<BookingResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<'booking' | 'architecture'>('booking');
 
@@ -19,8 +26,14 @@ function App() {
     try {
       const response = await axios.post('/api/book', formData);
       setResult({ success: true, data: response.data });
-    } catch (err: any) {
-      setResult({ success: false, error: err.response?.data || err.message });
+    } catch (err) {
+      // A thrown value is not guaranteed to be an Error, let alone an AxiosError, so it
+      // is narrowed rather than asserted. The 400 the API returns for invalid input
+      // arrives here with the validation detail in the response body.
+      setResult({
+        success: false,
+        error: axios.isAxiosError(err) ? (err.response?.data ?? err.message) : String(err)
+      });
     } finally {
       setLoading(false);
     }
