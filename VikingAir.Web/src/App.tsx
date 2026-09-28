@@ -179,7 +179,7 @@ function App() {
                       </div>
                     </div>
 
-                    {result.success && result.data && (
+                    {result.success && result.data != null && (
                       <div className="space-y-4">
                         {/* Sannr Status Card */}
                         <div className="bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/20 rounded-xl p-4 flex items-center gap-4">
