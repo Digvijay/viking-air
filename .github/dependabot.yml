@@ -49,6 +49,22 @@ updates:
           - "typescript"
           - "typescript-eslint"
           - "@typescript-eslint/*"
+      # Same reasoning: @vitejs/plugin-react declares a peer range over vite majors, so
+      # bumping vite alone fails to install. vite 8 was proposed on its own and could
+      # not resolve against plugin-react 5.
+      vite:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+    ignore:
+      # typescript-eslint 8.x - the newest line there is - still does not accept
+      # TypeScript 7 as a peer, so grouping was not enough: the grouped upgrade also
+      # failed to install. This is an upstream gap, not a constraint of this project.
+      # Holding TypeScript at 5.x until typescript-eslint supports 7 keeps the lint and
+      # type-check legs working; minor and patch updates still come through. Remove this
+      # entry once typescript-eslint publishes support.
+      - dependency-name: "typescript"
+        update-types: [ "version-update:semver-major" ]
   - package-ecosystem: "dotnet-sdk"
     directory: "/"
     schedule:
