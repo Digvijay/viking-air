@@ -16,6 +16,9 @@ jobs:
   aot-publish-and-run:
     name: AOT publish and run (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Without this the smoke test below could hang until GitHub's 6-hour default. The API
+    # is a web host, so the binary does not exit on its own.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -67,18 +70,95 @@ jobs:
         shell: pwsh
         run: ./eng/check-aot-warnings.ps1 -LogPath aot-publish.log -BaselinePath eng/aot-baseline.txt
 
-      - name: Execute the native binary
+      - name: Smoke-test the native binary
+        # This step used to run the binary in the foreground and wait for it to exit. That
+        # was never reached, because the publish always failed first. The moment the
+        # baseline check made publication succeed, it hung: VikingAir.Api is a web host, so
+        # `app.Run()` blocks forever and the job would have burned until the 6-hour cap.
+        #
+        # It now does what the step was always meant to prove - that the natively compiled
+        # binary actually serves traffic. Starting is a weak claim: a Native AOT failure
+        # typically surfaces on the first request, when a formatter or serializer that ILC
+        # could not see is finally needed. So the test exercises the real booking endpoint,
+        # which is the one path that uses Sannr, Rapp and AutoMappic together, and also
+        # sends an invalid payload to confirm validation still rejects it rather than
+        # silently passing.
+        #
+        # ASPNETCORE_ENVIRONMENT=Development is set because MapDefaultEndpoints only maps
+        # /health outside production.
         shell: bash
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://127.0.0.1:5080
         run: |
-          set -e
+          set -euo pipefail
+
           binary=$(find ./aot-output -maxdepth 1 -type f \( -perm -u+x -o -name '*.exe' \) ! -name '*.pdb' ! -name '*.json' ! -name '*.dbg' | head -n 1)
           if [ -z "$binary" ]; then
             echo "::error::No native executable was produced."
             ls -R ./aot-output
             exit 1
           fi
-          echo "Running $binary"
-          "$binary"
+          echo "Starting $binary"
+
+          "$binary" > server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+          ready=0
+          for _ in $(seq 1 40); do
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "::error::The native binary exited during startup."
+              cat server.log
+              exit 1
+            fi
+            if curl --silent --fail http://127.0.0.1:5080/health > /dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$ready" -ne 1 ]; then
+            echo "::error::The native binary did not become healthy within 40s."
+            cat server.log
+            exit 1
+          fi
+          echo "Health check passed."
+
+          # A valid booking must be accepted and must come back mapped and confirmed.
+          body=$(curl --silent --show-error --fail-with-body \
+            -X POST http://127.0.0.1:5080/api/book \
+            -H 'Content-Type: application/json' \
+            -d '{"flightCode":" ba123 ","passportNumber":"x1234567","seatPreference":"Window"}')
+          echo "Response: $body"
+
+          case "$body" in
+            *Confirmed*) ;;
+            *) echo "::error::Booking was not confirmed. Response: $body"; cat server.log; exit 1 ;;
+          esac
+
+          # Sanitization is source-generated, so prove it actually ran in the native binary.
+          case "$body" in
+            *BA123*) ;;
+            *) echo "::error::Sannr sanitization did not run: expected the flight code upper-cased. Response: $body"; cat server.log; exit 1 ;;
+          esac
+
+          # An invalid payload must be rejected. If this returns 200 the validation filter
+          # has silently stopped running - the exact defect Sannr 1.7.0 was released to fix.
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -X POST http://127.0.0.1:5080/api/book \
+            -H 'Content-Type: application/json' \
+            -d '{"flightCode":"","passportNumber":"x","seatPreference":"Spaceship"}')
+
+          if [ "$status" != "400" ]; then
+            echo "::error::Invalid payload returned HTTP $status, expected 400. Validation is not running."
+            cat server.log
+            exit 1
+          fi
+          echo "Invalid payload correctly rejected with 400."
+
+          echo "Native binary served traffic correctly."
 
       - name: Report native binary size
         shell: bash
