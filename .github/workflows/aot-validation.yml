@@ -84,8 +84,16 @@ jobs:
         # sends an invalid payload to confirm validation still rejects it rather than
         # silently passing.
         #
+        # Readiness is probed on /alive, not /health. /health requires every check to pass,
+        # including the Redis check that Aspire's AddRedisClient registers, and there is no
+        # Redis instance in CI - it is normally orchestrated by the Aspire AppHost. /alive
+        # only requires checks tagged "live", which is exactly the aliveness question being
+        # asked here. The booking endpoint itself does not need Redis: AddRedisClient
+        # registers a multiplexer, not an IDistributedCache, so HybridCache serves from its
+        # in-process L1 cache.
+        #
         # ASPNETCORE_ENVIRONMENT=Development is set because MapDefaultEndpoints only maps
-        # /health outside production.
+        # the health endpoints outside production.
         shell: bash
         env:
           ASPNETCORE_ENVIRONMENT: Development
@@ -112,7 +120,7 @@ jobs:
               cat server.log
               exit 1
             fi
-            if curl --silent --fail http://127.0.0.1:5080/health > /dev/null 2>&1; then
+            if curl --silent --fail http://127.0.0.1:5080/alive > /dev/null 2>&1; then
               ready=1
               break
             fi
@@ -120,11 +128,11 @@ jobs:
           done
 
           if [ "$ready" -ne 1 ]; then
-            echo "::error::The native binary did not become healthy within 40s."
+            echo "::error::The native binary did not report alive within 40s."
             cat server.log
             exit 1
           fi
-          echo "Health check passed."
+          echo "Aliveness check passed."
 
           # A valid booking must be accepted and must come back mapped and confirmed.
           body=$(curl --silent --show-error --fail-with-body \
@@ -198,3 +206,4 @@ jobs:
           -p:EnableTrimAnalyzer=true
           -p:EnableSingleFileAnalyzer=true
           -p:WarningsAsErrors=IL2026%3BIL2046%3BIL2062%3BIL2067%3BIL2070%3BIL2072%3BIL2075%3BIL2087%3BIL2091%3BIL3050%3BIL3051%3BIL3052%3BIL3053
+
