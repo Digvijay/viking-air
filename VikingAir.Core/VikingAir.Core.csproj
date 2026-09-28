@@ -1,14 +1,35 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>$(ToolkitAppTargetFrameworks)</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);AutoMappic.Generated</InterceptorsNamespaces>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Rapp" Version="1.1.0" />
-    <PackageReference Include="Sannr" Version="1.2.0" />
+    <!-- AutoMappic ships the source generator and the runtime library AutoMappic.Core in one
+         package, and the generator runs in every project that references this assembly. In
+         each of those projects it emits a registration that calls this assembly's generated
+         VikingAir_Core_Registration class, which the generator declares `internal` - so the
+         downstream compile fails with CS0122 unless this assembly grants InternalsVisibleTo.
+         See AssemblyInfo.cs.
+
+         The reference is therefore kept public (no PrivateAssets): suppressing it would also
+         withhold AutoMappic.Core.dll, which the generated mapping code needs at run time, and
+         downstream projects would compile and then fail with
+         FileNotFoundException: Could not load file or assembly 'AutoMappic.Core'.
+
+         All Map<T>() calls stay inside this assembly, behind BookingMapping. Calling Map<T>()
+         from another assembly emits interceptors targeting helper methods that only exist
+         here (CS1061). -->
+    <PackageReference Include="AutoMappic" Version="$(AutoMappicVersion)" />
+    <PackageReference Include="Rapp" Version="$(RappVersion)" />
+    <PackageReference Include="Sannr" Version="$(SannrVersion)" />
+
+    <!-- Transitive security pin: Sannr 1.6.0 resolves Microsoft.OpenApi 2.4.1, which is
+         affected by GHSA-v5pm-xwqc-g5wc. Remove this pin once Sannr ships a patched floor. -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.12.2" />
   </ItemGroup>
 
 </Project>
