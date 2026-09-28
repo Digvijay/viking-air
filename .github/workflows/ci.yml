@@ -66,6 +66,41 @@ jobs:
           name: code-coverage-${{ matrix.os }}
           path: ./coverage
 
+  web:
+    name: Web build & lint (VikingAir.Web)
+    runs-on: ubuntu-latest
+    # The front end was invisible to CI. Dependabot opened npm pull requests - including
+    # major bumps of TypeScript, ESLint and lucide-react - and every check on them reported
+    # green, because every check was a .NET job. Nothing compiled or linted this project at
+    # all, so "all checks passed" on a front-end change meant only that the back end still
+    # built. This job is what makes those results mean something.
+    defaults:
+      run:
+        working-directory: VikingAir.Web
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: VikingAir.Web/package-lock.json
+
+      # ci, not install: it installs exactly what package-lock.json pins and fails if the
+      # lock file and package.json disagree, so a Dependabot pull request cannot pass by
+      # silently resolving to something other than what it proposes to commit.
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Runs tsc -b before vite build, so this is a type check as well as a bundle.
+      - name: Build
+        run: npm run build
+
   preview:
     name: Preview .NET (net11.0)
     runs-on: ubuntu-latest

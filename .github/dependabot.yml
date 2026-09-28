@@ -40,3 +40,12 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
+    # global.json pins the SDK the stable build uses. Dependabot proposed
+    # 11.0.100-rc.1 as an ordinary bump, which failed every job except the one
+    # deliberately running a preview SDK - the pin is what keeps the stable legs
+    # stable, so a prerelease major cannot go in it. The net11.0 preview leg is how
+    # this repository tracks the next SDK; it installs its own and needs no pin.
+    # Patch and minor updates within the current major are still wanted.
+    ignore:
+      - dependency-name: "dotnet-sdk"
+        update-types: [ "version-update:semver-major" ]
