@@ -34,6 +34,21 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
+    groups:
+      # These six cannot move independently. typescript-eslint peer-depends on both
+      # eslint and typescript, and @eslint/js must match eslint's major. Dependabot
+      # raised @eslint/js 10 and typescript 7 as separate pull requests and both died
+      # in npm ci with ERESOLVE, because each one alone contradicts the peers of a
+      # package it shares the tree with. Grouped, they are proposed as one coordinated
+      # upgrade that can actually resolve, install and lint.
+      lint-and-types:
+        patterns:
+          - "eslint"
+          - "@eslint/*"
+          - "eslint-plugin-*"
+          - "typescript"
+          - "typescript-eslint"
+          - "@typescript-eslint/*"
   - package-ecosystem: "dotnet-sdk"
     directory: "/"
     schedule:
